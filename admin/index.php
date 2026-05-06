@@ -299,13 +299,42 @@ table{width:100%;border-collapse:separate;border-spacing:0;background:var(--pane
 
 <?php if($tab==='dashboard'): ?>
 <h1>📊 Dashboard</h1>
-<div class="stats-grid">
-  <div class="stat-card"><div class="stat-val blue"><?=$stats['users']?></div><div class="stat-label">👥 Người dùng</div></div>
-  <div class="stat-card"><div class="stat-val orange"><?=$stats['orders_pending']?></div><div class="stat-label">🛒 Chờ thanh toán</div></div>
-  <div class="stat-card"><div class="stat-val green"><?=$stats['orders_approved']?></div><div class="stat-label">✅ Đơn thành công</div></div>
-  <div class="stat-card"><div class="stat-val green"><?=number_format($stats['revenue'],0,',','.')?> đ</div><div class="stat-label">💰 Doanh thu</div></div>
-  <div class="stat-card"><div class="stat-val blue"><?=$stats['keys_active']?></div><div class="stat-label">🔑 Key đang active</div></div>
-  <div class="stat-card"><div class="stat-val"><?=$stats['keys_total']?></div><div class="stat-label">🔑 Tổng keys</div></div>
+
+<!-- Stats Grid 2x2 -->
+<div class="stats-grid" style="grid-template-columns:repeat(2,1fr);margin-bottom:24px">
+  <?php
+  $deviceCount = $db->query("SELECT COUNT(DISTINCT devices) FROM (SELECT TRIM(SUBSTRING_INDEX(SUBSTRING_INDEX(devices, ',', numbers.n), ',', -1)) as device FROM `keys` CROSS JOIN (SELECT 1 n UNION SELECT 2 UNION SELECT 3 UNION SELECT 4 UNION SELECT 5) numbers WHERE CHAR_LENGTH(devices) - CHAR_LENGTH(REPLACE(devices, ',', '')) >= numbers.n - 1 AND devices IS NOT NULL AND devices != '') devices WHERE device != ''")->fetchColumn();
+  $lockedDevices = $db->query("SELECT COUNT(*) FROM `keys` WHERE status='locked'")->fetchColumn();
+  $expiredKeys = $db->query("SELECT COUNT(*) FROM `keys` WHERE status='expired'")->fetchColumn();
+  $totalPackages = $db->query("SELECT COUNT(*) FROM packages WHERE is_active=1")->fetchColumn();
+  ?>
+  <div class="stat-card"><div class="stat-val blue"><?=$deviceCount?></div><div class="stat-label">📱 Thiết bị</div></div>
+  <div class="stat-card"><div class="stat-val red"><?=$lockedDevices?></div><div class="stat-label">🔒 Thiết bị khoá</div></div>
+  <div class="stat-card"><div class="stat-val orange"><?=$expiredKeys?></div><div class="stat-label">⏰ Hết hạn</div></div>
+  <div class="stat-card"><div class="stat-val"><?=$totalPackages?></div><div class="stat-label">📦 Gói</div></div>
+</div>
+
+<!-- Contact Section -->
+<div class="form-card" style="margin-bottom:20px">
+  <h3 style="margin-bottom:12px">📞 CONTACT</h3>
+  <div style="display:grid;gap:10px;font-size:14px;color:var(--text)">
+    <div><strong>Telegram:</strong> <a href="https://t.me/<?=BOT_USERNAME?>" target="_blank" style="color:var(--cyan)">@<?=BOT_USERNAME?></a></div>
+    <div><strong>Admin Chat ID:</strong> <?=ADMIN_CHAT_ID?></div>
+    <div><strong>Website:</strong> <a href="<?=SITE_URL?>" target="_blank" style="color:var(--cyan)"><?=SITE_URL?></a></div>
+  </div>
+</div>
+
+<!-- Account Info Section -->
+<div class="form-card">
+  <h3 style="margin-bottom:12px">👤 THÔNG TIN TÀI KHOẢN</h3>
+  <div style="display:grid;gap:10px;font-size:14px;color:var(--text)">
+    <div><strong>Admin:</strong> web_admin</div>
+    <div><strong>Total Users:</strong> <?=$stats['users']?></div>
+    <div><strong>Total Keys:</strong> <?=$stats['keys_total']?></div>
+    <div><strong>Active Keys:</strong> <?=$stats['keys_active']?></div>
+    <div><strong>Revenue:</strong> <?=number_format($stats['revenue'],0,',','.')?>đ</div>
+    <div><strong>System:</strong> HCLOU Panel v2.0</div>
+  </div>
 </div>
 
 <h2 style="font-size:16px;margin-bottom:12px">🛒 Đơn chờ thanh toán</h2>
