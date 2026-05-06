@@ -11,7 +11,7 @@ $rateRules = [
     'create_order' => [8, 60], 'pending_orders' => [40, 60], 'order_status' => [80, 60], 'my_keys' => [80, 60],
     'get_free_link' => [10, 60], 'claim_free_key' => [10, 60],
     'reset_key' => [12, 60], 'reset_hwid' => [12, 60], 'delete_key' => [20, 60], 'search_key' => [60, 60],
-    'connect' => [120, 60],
+    'connect' => [120, 60], 'deposit_credit' => [8, 60], 'buy_plan' => [5, 60], 'create_key' => [8, 60],
 ];
 if (isset($rateRules[$action])) { [$lim,$win] = $rateRules[$action]; rateLimit('api_'.$action, $lim, $win, $ip); }
 
