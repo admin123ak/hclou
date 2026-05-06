@@ -1,0 +1,34 @@
+# Dependencies
+node_modules/
+vendor/
+
+# Environment & secrets
+.env
+.env.*
+*.env
+cookies*.txt
+
+# Archives & backups
+*.tar.gz
+*.zip
+*.sql.gz
+code_backup.*
+
+# Database dumps
+*.sql
+database.sql
+
+# IDE & OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
+
+# Logs
+*.log
+node_debug.log
+
+# Generated
+qsg_ui_extracted/
+hclou_updated/
+downloads/

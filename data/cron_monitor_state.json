@@ -1,0 +1,52 @@
+{
+    "fail_key": "f700c901f847274c8dfa696499d87d6273731bc1",
+    "last_alert": 1777557016,
+    "last_run": 1777557636,
+    "last_checks": [
+        {
+            "name": "Web home",
+            "ok": true,
+            "detail": "HTTP 200 \/ 475ms"
+        },
+        {
+            "name": "Mini App API games",
+            "ok": true,
+            "detail": "HTTP 200 \/ 319ms"
+        },
+        {
+            "name": "Database",
+            "ok": true,
+            "detail": "SELECT 1 OK"
+        },
+        {
+            "name": "MBBANK auto approve",
+            "ok": true,
+            "detail": "enabled"
+        },
+        {
+            "name": "MBBANK API config",
+            "ok": true,
+            "detail": "token\/url present"
+        },
+        {
+            "name": "Stuck pending orders",
+            "ok": true,
+            "detail": "0 orders older than 20m"
+        },
+        {
+            "name": "Recent bank ignored\/error",
+            "ok": false,
+            "detail": "1 tx in 2h"
+        },
+        {
+            "name": "Disk \/",
+            "ok": true,
+            "detail": "89.9% used, free 1.19GB"
+        },
+        {
+            "name": "RAM",
+            "ok": true,
+            "detail": "176MB available (18.4%)"
+        }
+    ]
+}
