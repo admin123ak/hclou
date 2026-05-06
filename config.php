@@ -215,8 +215,13 @@ function generateKey() {
 // =============================================
 // TÍNH GIÁ THEO DURATION VÀ MAX_DEVICES (Panel Kuro pricing)
 // =============================================
-function calculatePrice($durationHours, $maxDevices) {
-    // Pricing map từ Panel Kuro (VND converted from INR)
+function calculatePrice($durationHours, $maxDevices, $packagePrice = null) {
+    // Nếu có giá từ package (database) thì dùng luôn
+    if ($packagePrice !== null) {
+        $base = max(0, (float)$packagePrice);
+        return $base > 0 ? $base * $maxDevices : 0;
+    }
+    // Fallback: pricing map mặc định
     $priceMap = [
         2 => 5000,      // 2 Hours
         5 => 10000,     // 5 Hours
@@ -227,7 +232,6 @@ function calculatePrice($durationHours, $maxDevices) {
         720 => 120000,  // 30 Days
         1440 => 200000, // 60 Days
     ];
-
     $basePrice = $priceMap[$durationHours] ?? 0;
     return $basePrice * $maxDevices;
 }

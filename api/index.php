@@ -118,7 +118,7 @@ switch ($action) {
 
         // Calculate price: base price * max_devices
         $duration_hours = $package['duration_hours'] ?? ($package['days'] * 24);
-        $final_price = calculatePrice($duration_hours, $max_devices);
+        $final_price = calculatePrice($duration_hours, $max_devices, $package['price']);
 
         // Chống spam mua
         $dup = $db->prepare("SELECT o.order_code FROM orders o WHERE o.user_id=? AND o.game_id=? AND o.package_id=? AND o.status='pending' ORDER BY o.created_at DESC LIMIT 1");
