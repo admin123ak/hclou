@@ -16,7 +16,6 @@ code_backup.*
 
 # Database dumps
 *.sql
-database.sql
 
 # IDE & OS
 .idea/
