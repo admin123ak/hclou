@@ -10,6 +10,11 @@ CREATE TABLE IF NOT EXISTS users (
     full_name VARCHAR(200),
     avatar_url VARCHAR(500),
     balance DECIMAL(12,0) DEFAULT 0,
+    credit DECIMAL(12,0) DEFAULT 0,
+    plan_id INT DEFAULT NULL,
+    plan_expires_at TIMESTAMP NULL,
+    keys_used INT DEFAULT 0,
+    packages_used INT DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -172,3 +177,57 @@ CREATE TABLE IF NOT EXISTS admin_config_logs (
 --   /cron_run.php?token=<CRON_RUN_TOKEN>&job=maintenance -> maintenance.php
 --   /cron_run.php?token=<CRON_RUN_TOKEN>&job=automation  -> automation_daily.php
 --   /cron_run.php?token=<CRON_RUN_TOKEN>&job=backup      -> /www/backup/hclou_db/backup.sh
+
+-- =============================================
+-- PLANS SYSTEM (authtool.app style)
+-- =============================================
+
+CREATE TABLE IF NOT EXISTS plans (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(50) NOT NULL,
+    price DECIMAL(12,0) NOT NULL,
+    duration_days INT DEFAULT 30,
+    max_keys INT DEFAULT 100,
+    max_packages INT DEFAULT 10,
+    max_devices_per_key INT DEFAULT 3,
+    features JSON,
+    is_active TINYINT(1) DEFAULT 1,
+    sort_order INT DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Seed plans
+INSERT INTO plans (name, price, duration_days, max_keys, max_packages, max_devices_per_key, sort_order) VALUES
+('Free', 0, 30, 10, 2, 1, 1),
+('Basic', 100000, 30, 100, 10, 3, 2),
+('Pro', 500000, 30, 1000, 50, 10, 3),
+('Enterprise', 2000000, 30, 99999, 999, 99, 4);
+
+-- Credit transactions
+CREATE TABLE IF NOT EXISTS credit_transactions (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NOT NULL,
+    amount DECIMAL(12,0) NOT NULL,
+    type ENUM('deposit','purchase','refund','bonus') NOT NULL,
+    description TEXT,
+    reference VARCHAR(100),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_user_created (user_id, created_at),
+    CONSTRAINT fk_credit_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- User plans history
+CREATE TABLE IF NOT EXISTS user_plan_history (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NOT NULL,
+    plan_id INT NOT NULL,
+    started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    expires_at TIMESTAMP NULL,
+    keys_used INT DEFAULT 0,
+    packages_used INT DEFAULT 0,
+    status ENUM('active','expired','cancelled') DEFAULT 'active',
+    INDEX idx_user_status (user_id, status),
+    CONSTRAINT fk_plan_history_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    CONSTRAINT fk_plan_history_plan FOREIGN KEY (plan_id) REFERENCES plans(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
