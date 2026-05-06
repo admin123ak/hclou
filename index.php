@@ -786,7 +786,14 @@ async function confirmCreateOrder(){
   var totalPrice = basePrice * selDevices;
   btn.innerHTML='<span>'+T.muaNgay+'</span><span class="buy-sub">'+durationHours+'h · '+selDevices+'x device | '+fmtMoney(totalPrice)+'đ</span>';
 
-  if(res.success) showPayWithKey(res);
+  if(res.success) {
+    if(res.auto_approved) {
+      toast('Đã nhận key miễn phí thành công!','success');
+      loadKeys();
+    } else {
+      showPayWithKey(res);
+    }
+  }
   else { toast(res.error||T.loiTaoDon,'error'); if(res.order_code){ await loadPendingPayments(); setTimeout(function(){resumePay(0);},350); } }
 }
 

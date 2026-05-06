@@ -165,28 +165,82 @@ switch ($action) {
         }
 
         $order_code = generateOrderCode();
+
+        // Đơn 0đ → duyệt + kích hoạt key ngay lập tức
+        $isZeroPrice = ($final_price <= 0);
+
         $db->beginTransaction();
         try {
-            $db->prepare("INSERT INTO orders (order_code, user_id, game_id, package_id, amount, status) VALUES (?,?,?,?,?,'pending')")
-               ->execute([$order_code, $user['id'], $game_id, $package_id, $final_price]);
+            $orderStatus = $isZeroPrice ? 'approved' : 'pending';
+            $keyStatus = $isZeroPrice ? 'active' : 'pending';
+
+            if ($isZeroPrice) {
+                $startAt = date('Y-m-d H:i:s');
+                $expireAt = date('Y-m-d H:i:s', strtotime('+' . ((int)$package['days']) . ' days'));
+            } else {
+                $startAt = null;
+                $expireAt = null;
+            }
+
+            $db->prepare("INSERT INTO orders (order_code, user_id, game_id, package_id, amount, status, approved_at, approved_by) VALUES (?,?,?,?,?,?,?,?)")
+               ->execute([$order_code, $user['id'], $game_id, $package_id, $final_price, $orderStatus, $isZeroPrice ? date('Y-m-d H:i:s') : null, $isZeroPrice ? 'auto_zero_price' : null]);
             $order_id = $db->lastInsertId();
 
-            // Tạo key pending với duration_hours và max_devices
-            $db->prepare("INSERT INTO `keys` (key_code,user_id,game_id,package_id,order_id,status,days,duration_hours,max_devices,start_at,expire_at) VALUES (?,?,?,?,?,'pending',?,?,?,NULL,NULL)")
-               ->execute([$key_code, $user['id'], $game_id, $package_id, $order_id, $package['days'], $duration_hours, $max_devices]);
+            $db->prepare("INSERT INTO `keys` (key_code,user_id,game_id,package_id,order_id,status,days,duration_hours,max_devices,start_at,expire_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)")
+               ->execute([$key_code, $user['id'], $game_id, $package_id, $order_id, $keyStatus, $package['days'], $duration_hours, $max_devices, $startAt, $expireAt]);
             $db->commit();
         } catch (Exception $e) {
             $db->rollBack();
             jsonResponse(['error' => 'Lỗi tạo đơn hàng'], 500);
         }
 
-        // Thông báo admin qua Telegram
-        $amt = number_format($final_price, 0, ',', '.');
         $username = $user['telegram_username'] ?? $user['full_name'];
+        $amt = number_format($final_price, 0, ',', '.');
+
+        if ($isZeroPrice) {
+            // Notify admin: đơn 0đ đã auto-approve
+            $msg = "🤖 <b>AUTO DUYỆT ĐƠN 0đ #{$order_code}</b>\n\n" .
+                "👤 User: @{$username} (ID: {$user['telegram_id']})\n" .
+                "🎮 Game: {$package['game_name']}\n" .
+                "📦 Gói: {$package['name']} ({$duration_hours}h)\n" .
+                "🔑 Key: <code>{$key_code}</code>\n" .
+                "📱 Max devices: {$max_devices}\n" .
+                "💰 Số tiền: 0đ\n" .
+                "🕐 " . date('d/m/Y H:i:s');
+            sendTelegram(ADMIN_CHAT_ID, $msg);
+
+            // Notify user: key đã active
+            $shortOrder = preg_replace('/^ORD/i', '', $order_code);
+            $packageName = $package['name'];
+            $type = strtoupper($package['key_type'] ?? 'Normal') === 'VIP' ? 'VIP' : 'Normal';
+            $userMsg = "✅ <b>Key Purchase Successful!</b>\n\n" .
+                "• Order code : <code>{$shortOrder}</code>\n" .
+                "• License : <code>{$key_code}</code>\n" .
+                "• Package : <code>{$packageName}</code>\n" .
+                "• Type : {$type} — {$duration_hours}h — {$max_devices} devices / 0đ\n\n" .
+                "Duration started when license login.\n\n" .
+                "<b>Lưu ý:</b> để sử dụng một cách an toàn vui lòng không sử dụng bất cứ thứ gì có liên quan tới mod khác hoặc ứng dụng lạ trên thiết bị của bạn.";
+            sendTelegram($user['telegram_id'], $userMsg);
+
+            jsonResponse([
+                'success' => true,
+                'auto_approved' => true,
+                'order_code' => $order_code,
+                'key_code' => $key_code,
+                'amount' => 0,
+                'max_devices' => $max_devices,
+                'duration_hours' => $duration_hours,
+                'start_at' => $startAt,
+                'expire_at' => $expireAt,
+                'created_at' => date('Y-m-d H:i:s'),
+            ]);
+        }
+
+        // Đơn có phí → thông báo admin, hiện VietQR để thanh toán
         $msg = "🔔 <b>ĐƠN HÀNG MỚI #{$order_code}</b>\n\n👤 User: @{$username} (ID: {$user['telegram_id']})\n🎮 Game: {$package['game_name']}\n📦 Gói: {$package['name']} ({$duration_hours}h)\n🔑 Key: <code>{$key_code}</code>\n📱 Max devices: {$max_devices}\n💰 Số tiền: {$amt}đ\n🕐 " . date('d/m/Y H:i:s');
-        $markup = ['inline_keyboard' => [[
+        $markup = ['inline_keyboard' => [
             ['text' => '❌ Từ chối', 'callback_data' => 'reject_' . $order_code]
-        ]]];
+        ]];
         sendTelegram(ADMIN_CHAT_ID, $msg . "\n\n🤖 Auto-bank sẽ tự duyệt khi nhận đúng tiền + nội dung.", $markup);
 
         jsonResponse([
