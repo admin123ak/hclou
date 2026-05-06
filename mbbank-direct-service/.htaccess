@@ -1,0 +1,4 @@
+# HCLOU security: this directory is an internal local API service only.
+# Do not expose source/config/dependencies via public web hosting.
+Require all denied
+Deny from all

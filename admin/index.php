@@ -158,8 +158,44 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         header("Location: ?tab=packages"); exit;
     }
     if ($act === 'approve_order') {
-        header("Location: ?tab=orders&err=" . urlencode('Duyệt tay đã tắt. Đơn sẽ tự duyệt qua MBBANK API.'));
-        exit;
+        $order_code = $_POST['order_code'] ?? '';
+        $stmt = $db->prepare("SELECT o.*, u.telegram_id FROM orders o JOIN users u ON o.user_id=u.id WHERE o.order_code=? AND o.status='pending'");
+        $stmt->execute([$order_code]);
+        $order = $stmt->fetch();
+        if (!$order) {
+            header("Location: ?tab=orders&err=" . urlencode('Đơn không tồn tại hoặc đã được xử lý'));
+            exit;
+        }
+        $db->beginTransaction();
+        try {
+            $db->prepare("UPDATE orders SET status='approved',approved_by='web_admin',approved_at=NOW() WHERE order_code=?")->execute([$order_code]);
+            // Kích hoạt key(s) theo order
+            $stmt2 = $db->prepare("SELECT * FROM `keys` WHERE order_id=? AND status='pending'");
+            $stmt2->execute([$order['id']]);
+            $pendingKeys = $stmt2->fetchAll();
+            foreach ($pendingKeys as $pk) {
+                $duration = $pk['duration_hours'] ?? ($pk['days'] * 24);
+                $startAt = date('Y-m-d H:i:s');
+                $expireAt = date('Y-m-d H:i:s', strtotime("+{$duration} hours"));
+                $db->prepare("UPDATE `keys` SET status='active',start_at=?,expire_at=? WHERE id=?")->execute([$startAt, $expireAt, $pk['id']]);
+            }
+            $db->commit();
+            // Notify admin
+            $adminMsg = "✅ <b>ADMIN ĐÃ DUYỆT THỦ CÔNG #{$order_code}</b>\n\n"
+                . "👤 User: @{$order['telegram_username']} (ID: {$order['telegram_id']})\n"
+                . "💰 Số tiền: " . number_format($order['amount'], 0, ',', '.') . "đ\n"
+                . "🕐 " . date('d/m/Y H:i:s');
+            sendTelegram(ADMIN_CHAT_ID, $adminMsg);
+            // Notify user
+            $userMsg = "✅ <b>Đơn #{$order_code} đã được duyệt!</b>\n\nKey của bạn đã được kích hoạt và sẵn sàng sử dụng.\nVào web để xem chi tiết key.";
+            if ($order['telegram_id']) sendTelegram($order['telegram_id'], $userMsg);
+            header("Location: ?tab=orders&ok=approved_{$order_code}");
+            exit;
+        } catch (Exception $e) {
+            $db->rollBack();
+            header("Location: ?tab=orders&err=" . urlencode($e->getMessage()));
+            exit;
+        }
     }
 
 
@@ -274,7 +310,7 @@ table{width:100%;border-collapse:separate;border-spacing:0;background:var(--pane
 
 <h2 style="font-size:16px;margin-bottom:12px">🛒 Đơn chờ thanh toán</h2>
 <?php
-$pending = $db->query("SELECT o.*,u.telegram_username,u.full_name,g.name as game_name,p.name as pkg_name,p.days,p.duration_hours,k.key_code,k.max_devices FROM orders o JOIN users u ON o.user_id=u.id JOIN games g ON o.game_id=g.id JOIN packages p ON o.package_id=p.id LEFT JOIN `keys` k ON k.order_id=o.id AND k.status='pending' WHERE o.status='pending' ORDER BY o.created_at DESC LIMIT 20")->fetchAll();
+$pending = $db->query("SELECT o.*,u.telegram_username,u.full_name,g.name as game_name,p.name as pkg_name,p.days,p.duration_hours,k.key_code,k.max_devices,k.id as key_id FROM orders o JOIN users u ON o.user_id=u.id JOIN games g ON o.game_id=g.id JOIN packages p ON o.package_id=p.id LEFT JOIN `keys` k ON k.order_id=o.id WHERE o.status='pending' ORDER BY o.created_at DESC LIMIT 20")->fetchAll();
 if($pending): ?>
 <table>
 <tr><th>Mã đơn</th><th>User</th><th>Game / Gói</th><th>Key đã tạo</th><th>Thiết bị</th><th>Tiền</th><th>Thời gian</th><th>Thao tác</th></tr>
@@ -288,6 +324,7 @@ if($pending): ?>
   <td><b><?=number_format($o['amount'],0,',','.')?> đ</b></td>
   <td style="font-size:12px;color:#8b949e"><?=date('d/m H:i',strtotime($o['created_at']))?></td>
   <td>
+    <form method="POST" style="display:inline"><input type="hidden" name="csrf" value="<?=htmlspecialchars($_SESSION['admin_csrf'])?>"><input type="hidden" name="act" value="approve_order"><input type="hidden" name="order_code" value="<?=$o['order_code']?>"><button class="btn btn-green" onclick="return confirm('Duyệt đơn này?')">✅</button></form>
     <form method="POST" style="display:inline"><input type="hidden" name="csrf" value="<?=htmlspecialchars($_SESSION['admin_csrf'])?>"><input type="hidden" name="act" value="reject_order"><input type="hidden" name="order_code" value="<?=$o['order_code']?>"><button class="btn btn-red" onclick="return confirm('Từ chối?')">❌</button></form>
   </td>
 </tr>
@@ -321,6 +358,7 @@ $orders->execute([$filter_status]); $orders = $orders->fetchAll();
   <td style="font-size:12px;color:#8b949e"><?=date('d/m/Y H:i',strtotime($o['created_at']))?></td>
   <?php if($filter_status==='pending'):?>
   <td>
+    <form method="POST" style="display:inline"><input type="hidden" name="csrf" value="<?=htmlspecialchars($_SESSION['admin_csrf'])?>"><input type="hidden" name="act" value="approve_order"><input type="hidden" name="order_code" value="<?=$o['order_code']?>"><button class="btn btn-green" onclick="return confirm('Duyệt đơn này?')">✅ Duyệt</button></form>
     <form method="POST" style="display:inline"><input type="hidden" name="csrf" value="<?=htmlspecialchars($_SESSION['admin_csrf'])?>"><input type="hidden" name="act" value="reject_order"><input type="hidden" name="order_code" value="<?=$o['order_code']?>"><button class="btn btn-red" onclick="return confirm('Từ chối?')">❌</button></form>
   </td>
   <?php endif?>
