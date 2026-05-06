@@ -456,6 +456,125 @@ switch ($action) {
         $db->prepare("DELETE FROM `keys` WHERE id=? AND user_id=? AND status IN ('expired','locked')")->execute([$key_id, $user['id']]);
         jsonResponse(['success' => true]);
 
+    // ===== NẠP CREDIT =====
+    case 'deposit_credit':
+        if (!$user) jsonResponse(['error' => 'Chưa đăng nhập'], 401);
+        $amount = (int)($_POST['amount'] ?? 0);
+        if ($amount < 50000) jsonResponse(['error' => 'Số tiền tối thiểu 50,000đ'], 400);
+
+        $order_code = 'CRD' . date('ymd') . strtoupper(substr(uniqid(), -6));
+
+        $db->prepare("INSERT INTO orders (order_code, user_id, game_id, package_id, amount, status) VALUES (?, ?, 0, 0, ?, 'pending')")
+           ->execute([$order_code, $user['id'], $amount]);
+
+        jsonResponse([
+            'success' => true,
+            'order_code' => $order_code,
+            'amount' => $amount,
+            'bank_account' => BANK_ACCOUNT,
+            'bank_name' => BANK_NAME,
+            'bank_owner' => BANK_OWNER,
+            'transfer_content' => $order_code,
+            'vietqr_url' => buildVietQrUrl($amount, $order_code),
+        ]);
+
+    // ===== MUA PLAN =====
+    case 'buy_plan':
+        if (!$user) jsonResponse(['error' => 'Chưa đăng nhập'], 401);
+        $plan_id = (int)($_POST['plan_id'] ?? 0);
+
+        $stmt = $db->prepare("SELECT * FROM plans WHERE id=? AND is_active=1");
+        $stmt->execute([$plan_id]);
+        $plan = $stmt->fetch();
+        if (!$plan) jsonResponse(['error' => 'Gói không tồn tại'], 404);
+
+        $price = (int)$plan['price'];
+
+        if ($price > 0) {
+            // Check credit
+            if (($user['credit'] ?? 0) < $price) {
+                jsonResponse(['error' => 'Credit không đủ. Vui lòng nạp thêm.', 'required' => $price, 'current' => $user['credit'] ?? 0], 400);
+            }
+            // Deduct credit
+            $db->prepare("UPDATE users SET credit = credit - ? WHERE id = ?")->execute([$price, $user['id']]);
+            // Log transaction
+            $db->prepare("INSERT INTO credit_transactions (user_id, amount, type, description, reference) VALUES (?, ?, 'purchase', ?, ?)")
+               ->execute([$user['id'], $price, 'Mua plan ' . $plan['name'], $plan_id]);
+        }
+
+        // Activate plan
+        $expires = date('Y-m-d H:i:s', strtotime('+ ' . $plan['duration_days'] . ' days'));
+        $db->prepare("UPDATE users SET plan_id = ?, plan_expires_at = ?, keys_used = 0, packages_used = 0 WHERE id = ?")
+           ->execute([$plan_id, $expires, $user['id']]);
+
+        jsonResponse(['success' => true, 'message' => 'Mua plan ' . $plan['name'] . ' thành công!', 'expires_at' => $expires]);
+
+    // ===== TẠO KEY (check quota) =====
+    case 'create_key':
+        if (!$user) jsonResponse(['error' => 'Chưa đăng nhập'], 401);
+        $game_id = (int)($_POST['game_id'] ?? 0);
+        $duration_hours = (int)($_POST['duration_hours'] ?? 24);
+        $max_devices = max(1, (int)($_POST['max_devices'] ?? 1));
+        $custom_key = trim($_POST['custom_key'] ?? '');
+
+        // Check plan quota
+        $plan_id = $user['plan_id'] ?? null;
+        $planInfo = null;
+        if ($plan_id) {
+            $stmt = $db->prepare("SELECT * FROM plans WHERE id=?");
+            $stmt->execute([$plan_id]);
+            $planInfo = $stmt->fetch();
+        }
+        $max_keys = $planInfo ? (int)$planInfo['max_keys'] : 10;
+        $keys_used = $user['keys_used'] ?? 0;
+        if ($keys_used >= $max_keys) {
+            jsonResponse(['error' => 'Đã đạt giới hạn keys (' . $keys_used . '/' . $max_keys . '). Nâng cấp plan để tạo thêm.'], 403);
+        }
+
+        // Check plan max_devices
+        $plan_max_dev = $planInfo ? (int)$planInfo['max_devices_per_key'] : 1;
+        if ($max_devices > $plan_max_dev) {
+            jsonResponse(['error' => 'Plan của bạn chỉ cho phép tối đa ' . $plan_max_dev . ' devices/key'], 400);
+        }
+
+        // Check game exists
+        $stmt = $db->prepare("SELECT * FROM games WHERE id=? AND is_active=1");
+        $stmt->execute([$game_id]);
+        if (!$stmt->fetch()) jsonResponse(['error' => 'Game không tồn tại'], 404);
+
+        // Generate or use custom key
+        if ($custom_key) {
+            if (strlen($custom_key) < 6 || strlen($custom_key) > 30) jsonResponse(['error' => 'Key 6-30 ký tự'], 400);
+            if (!preg_match('/^[a-zA-Z0-9]+$/', $custom_key)) jsonResponse(['error' => 'Key chỉ chữ và số'], 400);
+            $check = $db->prepare("SELECT id FROM `keys` WHERE key_code=?");
+            $check->execute([$custom_key]);
+            if ($check->fetch()) jsonResponse(['error' => 'Key đã tồn tại'], 400);
+            $key_code = $custom_key;
+        } else {
+            $key_code = generateKey();
+            $check = $db->prepare("SELECT id FROM `keys` WHERE key_code=?");
+            do { $check->execute([$key_code]); if (!$check->fetch()) break; $key_code = generateKey(); } while(true);
+        }
+
+        $db->beginTransaction();
+        try {
+            $db->prepare("INSERT INTO `keys` (key_code, user_id, game_id, package_id, status, days, duration_hours, max_devices, start_at, expire_at) VALUES (?, ?, ?, 0, 'active', ?, ?, ?, NOW(), DATE_ADD(NOW(), INTERVAL ? HOUR))")
+               ->execute([$key_code, $user['id'], $game_id, ceil($duration_hours / 24), $duration_hours, $max_devices, $duration_hours]);
+            $db->prepare("UPDATE users SET keys_used = keys_used + 1 WHERE id = ?")->execute([$user['id']]);
+            $db->commit();
+        } catch (Exception $e) {
+            $db->rollBack();
+            jsonResponse(['error' => 'Lỗi tạo key'], 500);
+        }
+
+        jsonResponse([
+            'success' => true,
+            'key_code' => $key_code,
+            'duration_hours' => $duration_hours,
+            'max_devices' => $max_devices,
+            'expires_at' => date('Y-m-d H:i:s', strtotime('+ ' . $duration_hours . ' hours'))
+        ]);
+
     // ===== TRẠNG THÁI ĐƠN HÀNG =====
     case 'order_status':
         if (!$user) jsonResponse(['error' => 'Chưa đăng nhập'], 401);
