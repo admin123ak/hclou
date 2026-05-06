@@ -338,6 +338,35 @@ switch ($action) {
         jsonResponse(['success'=>true,'orders'=>$orders]);
 
     // ===== KEY CỦA USER =====
+    case 'user_plan':
+        if (!$user) jsonResponse(['error' => 'Chưa đăng nhập'], 401);
+
+        // Get user's current plan
+        $planInfo = null;
+        if ($user['plan_id']) {
+            $stmt = $db->prepare("SELECT p.*, u.plan_expires_at, u.keys_used, u.packages_used
+                FROM plans p
+                JOIN users u ON u.plan_id = p.id
+                WHERE p.id = ? AND u.id = ?");
+            $stmt->execute([$user['plan_id'], $user['id']]);
+            $planInfo = $stmt->fetch();
+        }
+
+        // Default to Free plan if no plan
+        if (!$planInfo) {
+            $stmt = $db->prepare("SELECT * FROM plans WHERE name='Free' LIMIT 1");
+            $stmt->execute();
+            $freePlan = $stmt->fetch();
+            if ($freePlan) {
+                $planInfo = $freePlan;
+                $planInfo['keys_used'] = $user['keys_used'] ?? 0;
+                $planInfo['packages_used'] = $user['packages_used'] ?? 0;
+                $planInfo['expires_at'] = null;
+            }
+        }
+
+        jsonResponse(['success' => true, 'plan' => $planInfo]);
+
     case 'my_keys':
         if (!$user) jsonResponse(['error' => 'Chưa đăng nhập'], 401);
         $filter = $_GET['filter'] ?? 'all'; // all, active, expired, locked

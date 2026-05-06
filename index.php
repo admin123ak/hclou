@@ -282,8 +282,22 @@ html,body{height:100%;background:#0a0e1a!important;color:#e6edf3;font-family:-ap
     <div class="sec-head">
       <div class="sec-icon"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6h15l-1.5 8.5H8L6 3H3"/><circle cx="9" cy="20" r="1.4"/><circle cx="18" cy="20" r="1.4"/></svg></div>
       <div>
-        <div class="sec-title" data-i18n="buyNew">Mua Key mới</div>
-        <div class="sec-sub" data-i18n="buySub">Chọn ứng dụng và gói ngày</div>
+        <div class="sec-title">🚀 Tạo Keys & Packages</div>
+        <div class="sec-sub">Chọn game và tạo key trong quota của bạn</div>
+      </div>
+      <a href="plans.php" style="margin-left:auto;padding:8px 16px;background:linear-gradient(135deg,#3b82f6,#06b6d4);color:#fff;border-radius:12px;font-size:13px;font-weight:900;text-decoration:none">📊 Plans</a>
+    </div>
+
+    <!-- User Plan Info -->
+    <div id="userPlanInfo" style="display:none;margin:0 16px 16px;padding:14px;background:linear-gradient(135deg,rgba(59,130,246,.15),rgba(6,182,212,.1));border:1px solid rgba(59,130,246,.3);border-radius:16px">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px">
+        <div style="font-size:13px;font-weight:900;color:var(--cyan2)">Plan hiện tại: <span id="planName">Free</span></div>
+        <div style="margin-left:auto;font-size:11px;color:var(--text2)">Hết hạn: <span id="planExpires">--</span></div>
+      </div>
+      <div style="display:flex;gap:16px;font-size:12px;color:var(--text2)">
+        <div>Keys: <span id="keysUsage" style="color:var(--text);font-weight:700">0/10</span></div>
+        <div>Packages: <span id="packagesUsage" style="color:var(--text);font-weight:700">0/2</span></div>
+        <div>Devices: <span id="devicesLimit" style="color:var(--text);font-weight:700">1</span></div>
       </div>
     </div>
 
@@ -544,6 +558,7 @@ async function startApp(tg){
     } else {
       document.getElementById('avatarInit').textContent=init;
     }
+    loadUserPlan();
     loadKeys('all');
     loadPendingPayments();
     processPendingClaim();
@@ -932,6 +947,19 @@ function renderPendingPayments(){
 function resumePay(i){
   var o=pendingPayOrders[i||0]; if(!o)return;
   showPay({order_code:o.order_code,amount:o.amount,bank_account:o.bank_account,bank_name:o.bank_name,bank_owner:o.bank_owner,transfer_content:o.transfer_content,vietqr_url:o.vietqr_url});
+}
+
+async function loadUserPlan(){
+  var res=await api('user_plan');
+  if(res.success && res.plan){
+    var p=res.plan;
+    document.getElementById('userPlanInfo').style.display='block';
+    document.getElementById('planName').textContent=p.name||'Free';
+    document.getElementById('planExpires').textContent=p.expires_at?new Date(p.expires_at).toLocaleDateString('vi-VN'):'--';
+    document.getElementById('keysUsage').textContent=(p.keys_used||0)+'/'+(p.max_keys||10);
+    document.getElementById('packagesUsage').textContent=(p.packages_used||0)+'/'+(p.max_packages||2);
+    document.getElementById('devicesLimit').textContent=p.max_devices_per_key||1;
+  }
 }
 
 async function loadKeys(filter){
