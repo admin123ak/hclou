@@ -11,6 +11,7 @@ $rateRules = [
     'create_order' => [8, 60], 'pending_orders' => [40, 60], 'order_status' => [80, 60], 'my_keys' => [80, 60],
     'get_free_link' => [10, 60], 'claim_free_key' => [10, 60],
     'reset_key' => [12, 60], 'reset_hwid' => [12, 60], 'delete_key' => [20, 60], 'search_key' => [60, 60],
+    'connect' => [120, 60],
 ];
 if (isset($rateRules[$action])) { [$lim,$win] = $rateRules[$action]; rateLimit('api_'.$action, $lim, $win, $ip); }
 
@@ -433,6 +434,11 @@ switch ($action) {
         $stmt = $db->prepare("SELECT o.*, g.name as game_name, p.name as pkg_name FROM orders o JOIN games g ON o.game_id=g.id JOIN packages p ON o.package_id=p.id WHERE o.order_code=? AND o.user_id=?");
         $stmt->execute([$order_code, $user['id']]);
         jsonResponse(['success' => true, 'order' => $stmt->fetch()]);
+
+    // ===== PANEL KURO CONNECT (App Authentication) =====
+    case 'connect':
+        include __DIR__ . '/connect.php';
+        exit;
 
     default:
         jsonResponse(['error' => 'Action không hợp lệ'], 400);

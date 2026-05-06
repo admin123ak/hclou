@@ -42,6 +42,9 @@ define('LINK4M_API_TOKEN', '69f0894f3bb1c61f3703a5d7');
 define('YEUMONEY_API_TOKEN', '5f2e7edafeea3ff426347f8c1eb5f77d55ec266a4be3a11a6bf8d612fe0bc8c3');
 define('FREE_GETKEY_ENABLED', true);
 
+// Panel Kuro Connect API secret
+define('CONNECT_STATIC_WORDS', 'Vm8Lk7Uj2JmsjCPVPVjrLa7zgfx3uz9E');
+
 // Timezone
 date_default_timezone_set('Asia/Ho_Chi_Minh');
 
