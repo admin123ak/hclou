@@ -4,8 +4,6 @@ vendor/
 
 # Environment & secrets
 .env
-.env.*
-*.env
 cookies*.txt
 
 # Archives & backups
@@ -13,9 +11,6 @@ cookies*.txt
 *.zip
 *.sql.gz
 code_backup.*
-
-# Database dumps
-*.sql
 
 # IDE & OS
 .idea/
