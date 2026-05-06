@@ -305,7 +305,7 @@ html,body{height:100%;background:#0a0e1a!important;color:#e6edf3;font-family:-ap
       </div>
 
       <div class="pkg-label"><span class="label-ico">📱</span><span data-i18n="chooseDevices">Số thiết bị</span></div>
-      <div id="deviceList" class="pkg-list" style="display:none">
+      <div id="deviceList" class="pkg-list">
         <div class="pkg-row" onclick="pickDevices(1,this)">
           <div><div class="pkg-days">1 Device</div><div class="pkg-mode">Giá cơ bản</div></div>
           <div class="pkg-cost">x1</div>
@@ -320,8 +320,8 @@ html,body{height:100%;background:#0a0e1a!important;color:#e6edf3;font-family:-ap
         </div>
       </div>
 
-      <div class="pkg-label" id="keyInputLabel" style="display:none"><span class="label-ico">🔑</span><span data-i18n="customKey">Key Code (tùy chọn)</span></div>
-      <div id="keyInputWrap" style="display:none;padding:0 12px 12px">
+      <div class="pkg-label" id="keyInputLabel"><span class="label-ico">🔑</span><span data-i18n="customKey">Key Code (tùy chọn)</span></div>
+      <div id="keyInputWrap" style="padding:0 12px 12px">
         <div style="display:flex;gap:8px;align-items:center">
           <input type="text" id="customKeyInput" placeholder="Nhập key hoặc để trống tự random"
                  style="flex:1;padding:12px;border-radius:12px;border:1px solid var(--border);background:var(--bg3);color:var(--text);font-family:monospace;font-size:13px;outline:none">
@@ -682,18 +682,15 @@ function pickPkg(pid,el){
   document.querySelectorAll('#pkgList .pkg-row').forEach(function(e){ e.classList.remove('on'); });
   el.classList.add('on');
 
-  // Show device selector and key input after package selected
-  if(!selPkg.is_free){
-    document.getElementById('deviceList').style.display='flex';
-    document.getElementById('keyInputLabel').style.display='block';
-    document.getElementById('keyInputWrap').style.display='block';
-    // Auto-select 1 device by default
-    if(!selDevices) pickDevices(1, document.querySelector('#deviceList .pkg-row'));
-  } else {
+  // Device selector and key input always visible (Panel Kuro style)
+  // Just hide for free keys
+  if(selPkg.is_free){
     document.getElementById('deviceList').style.display='none';
     document.getElementById('keyInputLabel').style.display='none';
     document.getElementById('keyInputWrap').style.display='none';
   }
+  // Auto-select 1 device by default if not selected yet
+  if(!selDevices && !selPkg.is_free) pickDevices(1, document.querySelector('#deviceList .pkg-row'));
 
   updBuyBtn();
 }
