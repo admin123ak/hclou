@@ -126,7 +126,7 @@ try {
     $seen = $approved = $matched = 0;
     foreach ($txs as $tx) {
         [$date, $amount, $desc] = normalizeMBBankTx($tx);
-        if ($amount <= 0 || $desc === '') continue;
+        if ($amount <= 0 && $desc === '') continue;
         $hash = hash('sha256', $date.'|'.$amount.'|'.$desc);
         preg_match('/\b(ORD[0-9A-Z]+)\b/i', $desc, $m);
         $orderCode = strtoupper($m[1] ?? '');
@@ -152,6 +152,38 @@ try {
                    ->execute([$res['status'], $res['note'], $hash]);
             }
         }
+    }
+    // Auto-approve pending orders with price = 0 (no bank transfer needed)
+    $zeroOrders = $db->query("SELECT o.*, p.days, p.key_type, p.price, g.name AS game_name, g.package_name, u.telegram_id
+        FROM orders o
+        JOIN packages p ON o.package_id=p.id
+        JOIN games g ON o.game_id=g.id
+        JOIN users u ON o.user_id=u.id
+        WHERE o.status='pending' AND CAST(o.amount AS DECIMAL(12,0)) = 0")->fetchAll();
+    foreach ($zeroOrders as $order) {
+        $keyStmt = $db->prepare("SELECT * FROM `keys` WHERE order_id=? AND status='pending' LIMIT 1 FOR UPDATE");
+        $keyStmt->execute([$order['id']]);
+        $key = $keyStmt->fetch();
+        if (!$key) continue;
+        $start = date('Y-m-d H:i:s');
+        $expire = date('Y-m-d H:i:s', strtotime('+'.((int)$order['days']).' days'));
+        $db->prepare("UPDATE `keys` SET status='active', start_at=?, expire_at=? WHERE id=?")
+           ->execute([$start, $expire, $key['id']]);
+        $db->prepare("UPDATE orders SET status='approved', approved_at=NOW(), approved_by=? WHERE id=? AND status='pending'")
+           ->execute(['auto_zero_price', $order['id']]);
+        $approved++;
+        $shortOrder = preg_replace('/^ORD/i', '', $order['order_code']);
+        $packageName = $order['package_name'] ?: $order['game_name'];
+        $type = strtoupper($order['key_type'] ?: 'Normal') === 'VIP' ? 'VIP' : 'Normal';
+        $userMsg = "✅ <b>Key Purchase Successful!</b>\n\n" .
+            "• Order code : <code>{$shortOrder}</code>\n" .
+            "• License : <code>{$key['key_code']}</code>\n" .
+            "• Package : <code>{$packageName}</code>\n" .
+            "• Type : {$type} — {$order['days']} days / 0đ\n\n" .
+            "Duration will start when license login.\n\n" .
+            "<b>Lưu ý:</b> để sử dụng một cách an toàn vui lòng không sử dụng bất cứ thứ gì có liên quan tới mod khác hoặc ứng dụng lạ trên thiết bị của bạn.";
+        sendTelegram($order['telegram_id'], $userMsg);
+        sendTelegram(ADMIN_CHAT_ID, "🤖 <b>AUTO DUYỆT ĐƠN 0đ</b>\n#{$order['order_code']}\n🔑 <code>{$key['key_code']}</code>");
     }
     $out = ['success'=>true, 'seen_new'=>$seen, 'matched'=>$matched, 'approved'=>$approved];
     if (PHP_SAPI === 'cli') mbLog(json_encode($out, JSON_UNESCAPED_UNICODE)); else jsonResponse($out);
